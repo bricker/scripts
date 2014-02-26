@@ -4,10 +4,11 @@ require 'apachelogregex'
 require 'date'
 require 'json'
 require 'csv'
-require 'pry'
+require 'uri'
+require 'cgi'
 
-REGEX = Regexp.new("GET /(?<type>audio|podcasts)/(?<show>.+?)/.+\.mp3\s")
-SHOWS = File.open("shows.txt").each_line.map { |l| l.chomp("\n") }.reject(&:empty?)
+REGEX = Regexp.new("GET (?<path>.+?)\s")
+SHOWS = File.open("shows.txt").each_line.reject(&:empty?)
 
 # populate hashes
 month_keys        = []
@@ -25,7 +26,6 @@ format = '%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"'
 # 25772 "-" "Mozilla/5.0 (Linux; U; Windows NT 6.1; en-us; dream) DoggCatcher"
 
 parser = ApacheLogRegex.new(format)
-
 
 File.open(ARGV[0]).each_line do |line|
   # don't bother parsing non-mp3 lines
@@ -64,26 +64,23 @@ File.open(ARGV[0]).each_line do |line|
   match = log_request.match(REGEX)
   next if !match
 
-  # Any podcast should be using the "podcasts" URL, so we can assume
-  # that any requests to /podcasts is a podcast access.
-  # Otherwise, we assume it's on-demand audio.
-  # This is still a safe assumption.
-  type = (match[:type] == "podcasts") ? :podcast : :ondemand
-
-  # This line should be counted for a specific show.
-  # This is no longer an accurate way to count podcast audio.
-  # The new parsing script fixes this problem.
-  key = SHOWS.include?(match[:show]) ? match[:show] : 'other'
+  uri       = URI.parse("http://media.scpr.org#{match[:path]}")
+  query     = CGI.parse(uri.query)
+  context   = query[:context]
+  source    = query[:via]
 
   month_key = date.strftime("%Y-%m")
   # Keep track of this key so we can use it for headers in the CSV.
   month_keys << month_key unless month_keys.include?(month_key)
 
-  # add to month and day stats
-  if !by_month[key][month_key]
-    by_month[key][month_key] = { podcast: 0, ondemand: 0 }
+  # add to month stats
+  by_month[context] ||= {}
+
+  if !by_month[context][month_key]
+    by_month[context][month_key] = { podcast: 0, ondemand: 0 }
   end
 
+  type = source == 'podcast' ? :podcast : :ondemand
   by_month[key][month_key][type] += 1
 end
 
