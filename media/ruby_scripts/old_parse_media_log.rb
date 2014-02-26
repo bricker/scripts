@@ -7,7 +7,7 @@ require 'csv'
 require 'pry'
 
 REGEX = Regexp.new("GET /(?<type>audio|podcasts)/(?<show>.+?)/.+\.mp3\s")
-SHOWS = File.open("shows.txt").each_line.map { |l| l.chomp("\n") }.reject(&:empty?)
+SHOWS = File.open("shows.txt").each_line.reject(&:empty?)
 
 # populate hashes
 month_keys        = []
